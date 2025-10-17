@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 interface CodeOpen {
   code: string;
@@ -59,14 +59,12 @@ const Dashboard: React.FC = () => {
   // Loading / error states
   const [loading, setLoading] = useState(true);
   const [inputLoading, setInputLoading] = useState(true);
-  const [filledLoading, setFilledLoading] = useState(true);
   const [submissionLoading, setSubmissionLoading] = useState(true);
   const [discountLoading, setDiscountLoading] = useState(true);
   const [referralLoading, setReferralLoading] = useState(true);
 
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
-  const [filledError, setFilledError] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [discountError, setDiscountError] = useState<string | null>(null);
   const [referralError, setReferralError] = useState<string | null>(null);
@@ -92,8 +90,8 @@ const Dashboard: React.FC = () => {
         const res = await fetch("/api/code_opens");
         if (!res.ok) throw new Error(await res.text());
         setCodeOpens(await res.json());
-      } catch (e: any) {
-        setError(e?.message ?? "Unknown Error");
+      } catch (e: unknown) {
+        setError((e as Error)?.message ?? "Unknown Error");
         setCodeOpens([]);
       }
       setLoading(false);
@@ -106,25 +104,21 @@ const Dashboard: React.FC = () => {
         const res = await fetch("/api/code_input_events");
         if (!res.ok) throw new Error(await res.text());
         setInputEvents(await res.json());
-      } catch (e: any) {
-        setInputError(e?.message ?? "Unknown Error");
+      } catch (e: unknown) {
+        setInputError((e as Error)?.message ?? "Unknown Error");
         setInputEvents([]);
       }
       setInputLoading(false);
     };
 
     const fetchFieldsFilled = async () => {
-      setFilledLoading(true);
-      setFilledError(null);
       try {
         const res = await fetch("/api/code_all_fields_filled");
         if (!res.ok) throw new Error(await res.text());
         setFieldsFilled(await res.json());
-      } catch (e: any) {
-        setFilledError(e?.message ?? "Unknown Error");
+      } catch {
         setFieldsFilled([]);
       }
-      setFilledLoading(false);
     };
 
     const fetchFormSubmissions = async () => {
@@ -134,8 +128,8 @@ const Dashboard: React.FC = () => {
         const res = await fetch("/api/form_submissions");
         if (!res.ok) throw new Error(await res.text());
         setFormSubmissions(await res.json());
-      } catch (e: any) {
-        setSubmissionError(e?.message ?? "Unknown Error");
+      } catch (e: unknown) {
+        setSubmissionError((e as Error)?.message ?? "Unknown Error");
         setFormSubmissions([]);
       }
       setSubmissionLoading(false);
@@ -148,8 +142,8 @@ const Dashboard: React.FC = () => {
         const res = await fetch("/api/discount");
         if (!res.ok) throw new Error(await res.text());
         setDiscounts(await res.json());
-      } catch (e: any) {
-        setDiscountError(e?.message ?? "Unknown Error");
+      } catch (e: unknown) {
+        setDiscountError((e as Error)?.message ?? "Unknown Error");
         setDiscounts([]);
       }
       setDiscountLoading(false);
@@ -162,8 +156,8 @@ const Dashboard: React.FC = () => {
         const res = await fetch("/api/referral");
         if (!res.ok) throw new Error(await res.text());
         setReferrals(await res.json());
-      } catch (e: any) {
-        setReferralError(e?.message ?? "Unknown Error");
+      } catch (e: unknown) {
+        setReferralError((e as Error)?.message ?? "Unknown Error");
         setReferrals([]);
       }
       setReferralLoading(false);
@@ -186,16 +180,16 @@ const Dashboard: React.FC = () => {
     return `${y}-${m}-${day}`;
   };
 
-  const inDateRange = (iso: string) => {
+  const inDateRange = useCallback((iso: string) => {
     if (!fromDate && !toDate) return true;
     const t = new Date(iso).getTime();
     if (fromDate && t < new Date(fromDate).getTime()) return false;
     if (toDate && t > new Date(toDate).getTime() + 24 * 60 * 60 * 1000 - 1) return false;
     return true;
-  };
+  }, [fromDate, toDate]);
 
-  const matchesCodeQuery = (code: string) =>
-    !codeQuery || code.toLowerCase().includes(codeQuery.toLowerCase());
+  const matchesCodeQuery = useCallback((code: string) =>
+    !codeQuery || code.toLowerCase().includes(codeQuery.toLowerCase()), [codeQuery]);
 
   // Build a contact map per code: prefer Discounts/Referrals; fallback to submission_data
   const contactByCode: Record<string, Contact> = useMemo(() => {
@@ -237,7 +231,7 @@ const Dashboard: React.FC = () => {
     const disc = discounts.filter((d) => matchesCodeQuery(d.code));
     const refs = referrals.filter((r) => matchesCodeQuery(r.code));
     return { opens, events, filled, subs, disc, refs };
-  }, [codeOpens, inputEvents, fieldsFilled, formSubmissions, discounts, referrals, fromDate, toDate, codeQuery]);
+  }, [codeOpens, inputEvents, fieldsFilled, formSubmissions, discounts, referrals, inDateRange, matchesCodeQuery]);
 
   // Per-code conversion as requested: ONLY count unique codes; success if same code appears in subs
   const perCodeOpenSubmit = useMemo(() => {
