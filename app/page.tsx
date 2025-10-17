@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 interface CodeOpen {
   code: string;
@@ -45,66 +45,239 @@ interface Referral {
   phone: string;
 }
 
+type Contact = { name?: string; email?: string; phone?: string };
+
 const Dashboard: React.FC = () => {
+  // Data states
   const [codeOpens, setCodeOpens] = useState<CodeOpen[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [inputEvents, setInputEvents] = useState<CodeInputEvent[]>([]);
-  const [inputLoading, setInputLoading] = useState(true);
-  const [inputError, setInputError] = useState<string|null>(null);
-
   const [fieldsFilled, setFieldsFilled] = useState<CodeAllFieldsFilled[]>([]);
-  const [filledLoading, setFilledLoading] = useState(true);
-  const [filledError, setFilledError] = useState<string|null>(null);
-
   const [formSubmissions, setFormSubmissions] = useState<FormSubmission[]>([]);
-  const [submissionLoading, setSubmissionLoading] = useState(true);
-  const [submissionError, setSubmissionError] = useState<string|null>(null);
-
   const [discounts, setDiscounts] = useState<Discount[]>([]);
-  const [discountLoading, setDiscountLoading] = useState(true);
-  const [discountError, setDiscountError] = useState<string|null>(null);
-
   const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [referralLoading, setReferralLoading] = useState(true);
-  const [referralError, setReferralError] = useState<string|null>(null);
 
-  // Metrics calculations
+  // Loading / error states
+  const [loading, setLoading] = useState(true);
+  const [inputLoading, setInputLoading] = useState(true);
+  const [filledLoading, setFilledLoading] = useState(true);
+  const [submissionLoading, setSubmissionLoading] = useState(true);
+  const [discountLoading, setDiscountLoading] = useState(true);
+  const [referralLoading, setReferralLoading] = useState(true);
+
+  const [error, setError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [filledError, setFilledError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+  const [referralError, setReferralError] = useState<string | null>(null);
+
+  // Global filters
+  const [fromDate, setFromDate] = useState<string>(""); // yyyy-mm-dd
+  const [toDate, setToDate] = useState<string>("");     // yyyy-mm-dd
+  const [codeQuery, setCodeQuery] = useState<string>("");
+
+  // Per-table quick filters
+  const [opensFilter, setOpensFilter] = useState("");
+  const [eventsFilter, setEventsFilter] = useState("");
+  const [subsFilter, setSubsFilter] = useState("");
+  const [discountFilter, setDiscountFilter] = useState("");
+  const [referralFilter, setReferralFilter] = useState("");
+
+  // Fetch data
+  useEffect(() => {
+    const fetchOpens = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/code_opens");
+        if (!res.ok) throw new Error(await res.text());
+        setCodeOpens(await res.json());
+      } catch (e: any) {
+        setError(e?.message ?? "Unknown Error");
+        setCodeOpens([]);
+      }
+      setLoading(false);
+    };
+
+    const fetchInputEvents = async () => {
+      setInputLoading(true);
+      setInputError(null);
+      try {
+        const res = await fetch("/api/code_input_events");
+        if (!res.ok) throw new Error(await res.text());
+        setInputEvents(await res.json());
+      } catch (e: any) {
+        setInputError(e?.message ?? "Unknown Error");
+        setInputEvents([]);
+      }
+      setInputLoading(false);
+    };
+
+    const fetchFieldsFilled = async () => {
+      setFilledLoading(true);
+      setFilledError(null);
+      try {
+        const res = await fetch("/api/code_all_fields_filled");
+        if (!res.ok) throw new Error(await res.text());
+        setFieldsFilled(await res.json());
+      } catch (e: any) {
+        setFilledError(e?.message ?? "Unknown Error");
+        setFieldsFilled([]);
+      }
+      setFilledLoading(false);
+    };
+
+    const fetchFormSubmissions = async () => {
+      setSubmissionLoading(true);
+      setSubmissionError(null);
+      try {
+        const res = await fetch("/api/form_submissions");
+        if (!res.ok) throw new Error(await res.text());
+        setFormSubmissions(await res.json());
+      } catch (e: any) {
+        setSubmissionError(e?.message ?? "Unknown Error");
+        setFormSubmissions([]);
+      }
+      setSubmissionLoading(false);
+    };
+
+    const fetchDiscounts = async () => {
+      setDiscountLoading(true);
+      setDiscountError(null);
+      try {
+        const res = await fetch("/api/discount");
+        if (!res.ok) throw new Error(await res.text());
+        setDiscounts(await res.json());
+      } catch (e: any) {
+        setDiscountError(e?.message ?? "Unknown Error");
+        setDiscounts([]);
+      }
+      setDiscountLoading(false);
+    };
+
+    const fetchReferrals = async () => {
+      setReferralLoading(true);
+      setReferralError(null);
+      try {
+        const res = await fetch("/api/referral");
+        if (!res.ok) throw new Error(await res.text());
+        setReferrals(await res.json());
+      } catch (e: any) {
+        setReferralError(e?.message ?? "Unknown Error");
+        setReferrals([]);
+      }
+      setReferralLoading(false);
+    };
+
+    fetchOpens();
+    fetchInputEvents();
+    fetchFieldsFilled();
+    fetchFormSubmissions();
+    fetchDiscounts();
+    fetchReferrals();
+  }, []);
+
+  // Helpers
+  const toDayKey = (d: string) => {
+    const dt = new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const inDateRange = (iso: string) => {
+    if (!fromDate && !toDate) return true;
+    const t = new Date(iso).getTime();
+    if (fromDate && t < new Date(fromDate).getTime()) return false;
+    if (toDate && t > new Date(toDate).getTime() + 24 * 60 * 60 * 1000 - 1) return false;
+    return true;
+  };
+
+  const matchesCodeQuery = (code: string) =>
+    !codeQuery || code.toLowerCase().includes(codeQuery.toLowerCase());
+
+  // Build a contact map per code: prefer Discounts/Referrals; fallback to submission_data
+  const contactByCode: Record<string, Contact> = useMemo(() => {
+    const map: Record<string, Contact> = {};
+    const put = (code: string, c: Contact) => {
+      if (!map[code]) map[code] = {};
+      map[code] = { ...map[code], ...Object.fromEntries(Object.entries(c).filter(([, v]) => v)) };
+    };
+
+    discounts.forEach((d) => put(d.code, { name: d.name, email: d.email, phone: d.phone }));
+    referrals.forEach((r) => put(r.code, { name: r.name, email: r.email, phone: r.phone }));
+
+    formSubmissions.forEach((s) => {
+      const sd = s.submission_data || {};
+      put(s.code, {
+        name: (sd["name"] as string) || (sd["full_name"] as string),
+        email: (sd["email"] as string),
+        phone: (sd["phone"] as string) || (sd["phone_number"] as string),
+      });
+    });
+
+    return map;
+  }, [discounts, referrals, formSubmissions]);
+
+  // Apply global filters
+  const filtered = useMemo(() => {
+    const opens = codeOpens.filter(
+      (o) => inDateRange(o.opened_at) && matchesCodeQuery(o.code)
+    );
+    const events = inputEvents.filter(
+      (e) => inDateRange(e.changed_at) && matchesCodeQuery(e.code)
+    );
+    const filled = fieldsFilled.filter(
+      (f) => inDateRange(f.filled_at) && matchesCodeQuery(f.code)
+    );
+    const subs = formSubmissions.filter(
+      (s) => inDateRange(s.submitted_at) && matchesCodeQuery(s.code)
+    );
+    const disc = discounts.filter((d) => matchesCodeQuery(d.code));
+    const refs = referrals.filter((r) => matchesCodeQuery(r.code));
+    return { opens, events, filled, subs, disc, refs };
+  }, [codeOpens, inputEvents, fieldsFilled, formSubmissions, discounts, referrals, fromDate, toDate, codeQuery]);
+
+  // Per-code conversion as requested: ONLY count unique codes; success if same code appears in subs
+  const perCodeOpenSubmit = useMemo(() => {
+    const openedCodes = new Set(filtered.opens.map((o) => o.code));
+    const submittedCodes = new Set(filtered.subs.map((s) => s.code));
+    let success = 0;
+    openedCodes.forEach((c) => {
+      if (submittedCodes.has(c)) success += 1;
+    });
+    const denom = openedCodes.size;
+    const rate = denom > 0 ? ((success / denom) * 100).toFixed(1) : "0.0";
+    return { openedCodesCount: denom, successCodesCount: success, ratePercent: rate };
+  }, [filtered.opens, filtered.subs]);
+
+  // Other metrics (note: open→submit (event-level) kept for context but we show the per-code rate as "Completion Rate")
   const metrics = useMemo(() => {
-    const uniqueCodes = new Set([...codeOpens.map(o => o.code)]).size;
-    const totalOpens = codeOpens.length;
-    const totalInputEvents = inputEvents.length;
-    const totalFieldsFilled = fieldsFilled.length;
-    const totalSubmissions = formSubmissions.length;
-    const totalDiscounts = discounts.length;
-    const totalReferrals = referrals.length;
-    
-    // Conversion rates
-    const openToFilledRate = totalOpens > 0 ? ((totalFieldsFilled / totalOpens) * 100).toFixed(1) : '0.0';
-    const filledToSubmitRate = totalFieldsFilled > 0 ? ((totalSubmissions / totalFieldsFilled) * 100).toFixed(1) : '0.0';
-    const openToSubmitRate = totalOpens > 0 ? ((totalSubmissions / totalOpens) * 100).toFixed(1) : '0.0';
-    
-    // Engagement metrics
-    const avgEventsPerCode = uniqueCodes > 0 ? (totalInputEvents / uniqueCodes).toFixed(1) : '0.0';
-    
-    // Most active codes
-    const codeActivity = inputEvents.reduce((acc, event) => {
-      acc[event.code] = (acc[event.code] || 0) + 1;
+    const uniqueCodes = new Set(filtered.opens.map((o) => o.code)).size;
+    const totalOpens = filtered.opens.length;
+    const totalInputEvents = filtered.events.length;
+    const totalFieldsFilled = filtered.filled.length;
+    const totalSubmissions = filtered.subs.length;
+    const totalDiscounts = filtered.disc.length;
+    const totalReferrals = filtered.refs.length;
+
+    const openToFilledRate =
+      totalOpens > 0 ? ((totalFieldsFilled / totalOpens) * 100).toFixed(1) : "0.0";
+    const filledToSubmitRate =
+      totalFieldsFilled > 0 ? ((totalSubmissions / totalFieldsFilled) * 100).toFixed(1) : "0.0";
+
+    // recent opens (last 24h, ignoring date filters)
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const recentOpens = codeOpens.filter((o) => now - new Date(o.opened_at).getTime() < dayMs).length;
+
+    // top active codes (by input events)
+    const codeActivity = filtered.events.reduce((acc, e) => {
+      acc[e.code] = (acc[e.code] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    
-    const topCodes = Object.entries(codeActivity)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 5);
-
-    // Recent activity (last 24h)
-    const now = new Date().getTime();
-    const day = 24 * 60 * 60 * 1000;
-    const recentOpens = codeOpens.filter(o => {
-      const openTime = new Date(o.opened_at).getTime();
-      return now - openTime < day;
-    }).length;
+    const topCodes = Object.entries(codeActivity).sort(([, a], [, b]) => b - a).slice(0, 5);
 
     return {
       uniqueCodes,
@@ -116,451 +289,644 @@ const Dashboard: React.FC = () => {
       totalReferrals,
       openToFilledRate,
       filledToSubmitRate,
-      openToSubmitRate,
-      avgEventsPerCode,
+      recentOpens,
       topCodes,
-      recentOpens
     };
-  }, [codeOpens, inputEvents, fieldsFilled, formSubmissions, discounts, referrals]);
+  }, [filtered, codeOpens]);
 
-  useEffect(() => {
-    const fetchOpens = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch('/api/code_opens');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        setCodeOpens(data);
-      } catch (e: unknown) {
-        let errMsg = 'Unknown Error';
-        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as {message?: unknown}).message === 'string') {
-          errMsg = (e as {message: string}).message;
-        }
-        setError(errMsg);
-        setCodeOpens([]);
-      }
-      setLoading(false);
-    };
-    fetchOpens();
+  // Aggregate by day for simple line charts
+  const seriesByDay = useMemo(() => {
+    const inc = (m: Record<string, number>, day: string) => (m[day] = (m[day] ?? 0) + 1);
+    const opens: Record<string, number> = {};
+    const subs: Record<string, number> = {};
+    filtered.opens.forEach((o) => inc(opens, toDayKey(o.opened_at)));
+    filtered.subs.forEach((s) => inc(subs, toDayKey(s.submitted_at)));
 
-    const fetchInputEvents = async () => {
-      setInputLoading(true);
-      setInputError(null);
-      try {
-        const res = await fetch('/api/code_input_events');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        setInputEvents(data);
-      } catch (e: unknown) {
-        let errMsg = 'Unknown Error';
-        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as {message?: unknown}).message === 'string') {
-          errMsg = (e as {message: string}).message;
-        }
-        setInputError(errMsg);
-        setInputEvents([]);
-      }
-      setInputLoading(false);
-    };
-    fetchInputEvents();
+    // union of days
+    const days = Array.from(new Set([...Object.keys(opens), ...Object.keys(subs)])).sort();
+    const opensSeries = days.map((d) => ({ day: d, value: opens[d] ?? 0 }));
+    const subsSeries = days.map((d) => ({ day: d, value: subs[d] ?? 0 }));
 
-    const fetchFieldsFilled = async () => {
-      setFilledLoading(true);
-      setFilledError(null);
-      try {
-        const res = await fetch('/api/code_all_fields_filled');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        setFieldsFilled(data);
-      } catch (e: unknown) {
-        let errMsg = 'Unknown Error';
-        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as {message?: unknown}).message === 'string') {
-          errMsg = (e as {message: string}).message;
-        }
-        setFilledError(errMsg);
-        setFieldsFilled([]);
-      }
-      setFilledLoading(false);
-    };
-    fetchFieldsFilled();
+    return { days, opensSeries, subsSeries };
+  }, [filtered.opens, filtered.subs]);
 
-    const fetchFormSubmissions = async () => {
-      setSubmissionLoading(true);
-      setSubmissionError(null);
-      try {
-        const res = await fetch('/api/form_submissions');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        setFormSubmissions(data);
-      } catch (e: unknown) {
-        let errMsg = 'Unknown Error';
-        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as {message?: unknown}).message === 'string') {
-          errMsg = (e as {message: string}).message;
-        }
-        setSubmissionError(errMsg);
-        setFormSubmissions([]);
-      }
-      setSubmissionLoading(false);
-    };
-    fetchFormSubmissions();
+  // Simple responsive SVG line chart
+  const LineChart: React.FC<{ data: { day: string; value: number }[]; title: string }> = ({
+    data,
+    title,
+  }) => {
+    const width = 640;
+    const height = 220;
+    const padding = 36;
 
-    const fetchDiscounts = async () => {
-      setDiscountLoading(true);
-      setDiscountError(null);
-      try {
-        const res = await fetch('/api/discount');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        setDiscounts(data);
-      } catch (e: unknown) {
-        let errMsg = 'Unknown Error';
-        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as {message?: unknown}).message === 'string') {
-          errMsg = (e as {message: string}).message;
-        }
-        setDiscountError(errMsg);
-        setDiscounts([]);
-      }
-      setDiscountLoading(false);
-    };
-    fetchDiscounts();
+    const values = data.map((d) => d.value);
+    const maxY = Math.max(1, ...values);
+    const minY = 0;
+    const x = (i: number) =>
+      padding + (i * (width - padding * 2)) / Math.max(1, data.length - 1);
+    const y = (v: number) =>
+      height - padding - ((v - minY) / (maxY - minY)) * (height - padding * 2);
 
-    const fetchReferrals = async () => {
-      setReferralLoading(true);
-      setReferralError(null);
-      try {
-        const res = await fetch('/api/referral');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        setReferrals(data);
-      } catch (e: unknown) {
-        let errMsg = 'Unknown Error';
-        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as {message?: unknown}).message === 'string') {
-          errMsg = (e as {message: string}).message;
-        }
-        setReferralError(errMsg);
-        setReferrals([]);
-      }
-      setReferralLoading(false);
-    };
-    fetchReferrals();
-  }, []);
+    const path = data
+      .map((d, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(d.value)}`)
+      .join(" ");
 
-  const glassCard = {
-    background: 'rgba(255, 255, 255, 0.7)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    border: '1px solid rgba(255, 255, 255, 0.3)',
-    borderRadius: 24,
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: "#1d1d1f", marginBottom: 8 }}>
+          {title}
+        </div>
+        <svg width={width} height={height} style={{ background: "#fff", borderRadius: 12 }}>
+          {/* axes */}
+          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#e5e5ea" />
+          <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#e5e5ea" />
+
+          {/* labels (x) */}
+          {data.map((d, i) => (
+            <text key={d.day} x={x(i)} y={height - padding + 16} fontSize="10" textAnchor="middle" fill="#86868b">
+              {d.day}
+            </text>
+          ))}
+
+          {/* labels (y) */}
+          {[0, Math.ceil(maxY / 2), maxY].map((t, i) => (
+            <g key={i}>
+              <text x={padding - 8} y={y(t)} fontSize="10" textAnchor="end" alignmentBaseline="middle" fill="#86868b">
+                {t}
+              </text>
+              <line x1={padding} y1={y(t)} x2={width - padding} y2={y(t)} stroke="#f2f2f7" />
+            </g>
+          ))}
+
+          {/* line */}
+          <path d={path} fill="none" stroke="#0071e3" strokeWidth={2} />
+          {/* points */}
+          {data.map((d, i) => (
+            <circle key={i} cx={x(i)} cy={y(d.value)} r={3} fill="#0071e3" />
+          ))}
+        </svg>
+      </div>
+    );
+  };
+
+  const card = {
+    background: "#ffffff",
+    borderRadius: 20,
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)",
     padding: 32,
+    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
   };
 
   const metricCard = {
-    ...glassCard,
-    padding: 24,
-    textAlign: 'center' as const,
-    transition: 'all 0.3s ease',
-    cursor: 'pointer',
+    ...card,
+    padding: 28,
+    textAlign: "center" as const,
+    cursor: "default",
   };
+
+  const hoverable = {
+    onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {
+      e.currentTarget.style.transform = "translateY(-2px)";
+      e.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.06)";
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => {
+      e.currentTarget.style.transform = "translateY(0)";
+      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)";
+    },
+  };
+
+  // Row hover helpers
+  const rowHover = {
+    onMouseEnter: (e: React.MouseEvent<HTMLTableRowElement>) => (e.currentTarget.style.background = "#e8e8ed"),
+    onMouseLeave: (e: React.MouseEvent<HTMLTableRowElement>) => (e.currentTarget.style.background = "#f5f5f7"),
+  };
+
+  // Filter helpers for per-table search
+  const includes = (s: string, q: string) =>
+    s?.toLowerCase().includes(q.trim().toLowerCase());
 
   return (
     <div
       style={{
-        padding: 40,
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #10b981 100%)',
-        position: 'relative',
+        padding: "48px 40px",
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif",
+        minHeight: "100vh",
+        background: "#f5f5f7",
+        position: "relative",
       }}
     >
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.3) 0%, transparent 50%)',
-        pointerEvents: 'none',
-      }} />
-
-      <div style={{ maxWidth: 1400, margin: '0 auto', position: 'relative', zIndex: 1 }}>
-        <div style={{ marginBottom: 48 }}>
-          <h1 style={{
-            fontSize: 56,
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            marginBottom: 8,
-            letterSpacing: -2,
-          }}>
-            Analytics Dashboard
+      <div style={{ maxWidth: 1280, margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div style={{ marginBottom: 24 }}>
+          <h1
+            style={{
+              fontSize: 48,
+              fontWeight: 600,
+              color: "#1d1d1f",
+              marginBottom: 8,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Analytics
           </h1>
-          <p style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 18, fontWeight: 500 }}>
-            Real-time metrics and insights from your database
+          <p style={{ color: "#86868b", fontSize: 21, fontWeight: 400, letterSpacing: "-0.01em" }}>
+            Real-time insights at a glance
           </p>
         </div>
 
-        {/* Metrics Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 20,
-          marginBottom: 40,
-        }}>
-          <div style={metricCard} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 14, color: '#0ea5e9', fontWeight: 600, marginBottom: 8 }}>Total Opens</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a1a' }}>{metrics.totalOpens}</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{metrics.recentOpens} in last 24h</div>
-          </div>
-
-          <div style={metricCard} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 14, color: '#06b6d4', fontWeight: 600, marginBottom: 8 }}>Unique Codes</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a1a' }}>{metrics.uniqueCodes}</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Active users</div>
-          </div>
-
-          <div style={metricCard} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 14, color: '#10b981', fontWeight: 600, marginBottom: 8 }}>Completion Rate</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a1a' }}>{metrics.openToSubmitRate}%</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Open → Submit</div>
-          </div>
-
-          <div style={metricCard} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 14, color: '#f59e0b', fontWeight: 600, marginBottom: 8 }}>Total Submissions</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a1a' }}>{metrics.totalSubmissions}</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Forms completed</div>
-          </div>
-
-          <div style={metricCard} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 14, color: '#3b82f6', fontWeight: 600, marginBottom: 8 }}>Avg Interactions</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a1a' }}>{metrics.avgEventsPerCode}</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Events per code</div>
-          </div>
-
-          <div style={metricCard} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 14, color: '#ec4899', fontWeight: 600, marginBottom: 8 }}>Referrals</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a1a' }}>{metrics.totalReferrals}</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Active referrals</div>
-          </div>
-        </div>
-
-        {/* Conversion Funnel */}
-        <div style={{ ...glassCard, marginBottom: 40 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 24 }}>Conversion Funnel</h2>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#0ea5e9' }}>{metrics.totalOpens}</div>
-              <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>Opens</div>
+        {/* GLOBAL FILTERS */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 16,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "#86868b", marginBottom: 6 }}>
+                From date
+              </label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #e5e5ea",
+                  outline: "none",
+                }}
+              />
             </div>
-            <div style={{ fontSize: 24, color: '#999' }}>→</div>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#10b981' }}>{metrics.totalFieldsFilled}</div>
-              <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>Fields Filled</div>
-              <div style={{ fontSize: 12, color: '#10b981', marginTop: 4, fontWeight: 600 }}>{metrics.openToFilledRate}%</div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "#86868b", marginBottom: 6 }}>
+                To date
+              </label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #e5e5ea",
+                  outline: "none",
+                }}
+              />
             </div>
-            <div style={{ fontSize: 24, color: '#999' }}>→</div>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#f59e0b' }}>{metrics.totalSubmissions}</div>
-              <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>Submissions</div>
-              <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4, fontWeight: 600 }}>{metrics.filledToSubmitRate}%</div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "#86868b", marginBottom: 6 }}>
+                Code search
+              </label>
+              <input
+                type="text"
+                placeholder="Search by code (e.g., VIP50)"
+                value={codeQuery}
+                onChange={(e) => setCodeQuery(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #e5e5ea",
+                  outline: "none",
+                }}
+              />
             </div>
           </div>
         </div>
 
-        {/* Top Codes */}
-        <div style={{ ...glassCard, marginBottom: 40 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 24 }}>Most Active Codes</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* METRICS */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+            marginBottom: 48,
+          }}
+        >
+          <div style={metricCard} {...hoverable}>
+            <div style={{ fontSize: 13, color: "#86868b", fontWeight: 500, marginBottom: 12 }}>Total Opens</div>
+            <div style={{ fontSize: 44, fontWeight: 600, color: "#1d1d1f" }}>{metrics.totalOpens}</div>
+            <div style={{ fontSize: 13, color: "#86868b", marginTop: 8 }}>{metrics.recentOpens} in last 24h</div>
+          </div>
+
+          <div style={metricCard} {...hoverable}>
+            <div style={{ fontSize: 13, color: "#86868b", fontWeight: 500, marginBottom: 12 }}>Unique Codes (opened)</div>
+            <div style={{ fontSize: 44, fontWeight: 600, color: "#1d1d1f" }}>{perCodeOpenSubmit.openedCodesCount}</div>
+            <div style={{ fontSize: 13, color: "#86868b", marginTop: 8 }}>Codes with at least one open</div>
+          </div>
+
+          <div style={metricCard} {...hoverable}>
+            <div style={{ fontSize: 13, color: "#86868b", fontWeight: 500, marginBottom: 12 }}>Completion Rate</div>
+            <div style={{ fontSize: 44, fontWeight: 600, color: "#1d1d1f" }}>{perCodeOpenSubmit.ratePercent}%</div>
+            <div style={{ fontSize: 13, color: "#86868b", marginTop: 8 }}>Open (code) → Submit (same code)</div>
+          </div>
+
+          <div style={metricCard} {...hoverable}>
+            <div style={{ fontSize: 13, color: "#86868b", fontWeight: 500, marginBottom: 12 }}>Total Submissions</div>
+            <div style={{ fontSize: 44, fontWeight: 600, color: "#1d1d1f" }}>{metrics.totalSubmissions}</div>
+            <div style={{ fontSize: 13, color: "#86868b", marginTop: 8 }}>Forms completed</div>
+          </div>
+
+          <div style={metricCard} {...hoverable}>
+            <div style={{ fontSize: 13, color: "#86868b", fontWeight: 500, marginBottom: 12 }}>Open → Filled</div>
+            <div style={{ fontSize: 44, fontWeight: 600, color: "#1d1d1f" }}>{metrics.openToFilledRate}%</div>
+            <div style={{ fontSize: 13, color: "#86868b", marginTop: 8 }}>Event-level</div>
+          </div>
+
+          <div style={metricCard} {...hoverable}>
+            <div style={{ fontSize: 13, color: "#86868b", fontWeight: 500, marginBottom: 12 }}>Filled → Submit</div>
+            <div style={{ fontSize: 44, fontWeight: 600, color: "#1d1d1f" }}>{metrics.filledToSubmitRate}%</div>
+            <div style={{ fontSize: 13, color: "#86868b", marginTop: 8 }}>Event-level</div>
+          </div>
+        </div>
+
+        {/* CHARTS */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f", marginBottom: 16 }}>Trends</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24 }}>
+            <LineChart data={seriesByDay.opensSeries} title="Opens per day" />
+            <LineChart data={seriesByDay.subsSeries} title="Submissions per day" />
+          </div>
+        </div>
+
+        {/* FUNNEL */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f", marginBottom: 24 }}>Conversion Funnel</h2>
+          <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 40, fontWeight: 600, color: "#1d1d1f" }}>{metrics.totalOpens}</div>
+              <div style={{ fontSize: 15, color: "#86868b", marginTop: 8, fontWeight: 500 }}>Opens</div>
+            </div>
+            <div style={{ fontSize: 28, color: "#d2d2d7" }}>→</div>
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 40, fontWeight: 600, color: "#1d1d1f" }}>{metrics.totalFieldsFilled}</div>
+              <div style={{ fontSize: 15, color: "#86868b", marginTop: 8, fontWeight: 500 }}>Fields Filled</div>
+              <div style={{ fontSize: 13, color: "#06c", marginTop: 6, fontWeight: 600 }}>{metrics.openToFilledRate}%</div>
+            </div>
+            <div style={{ fontSize: 28, color: "#d2d2d7" }}>→</div>
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 40, fontWeight: 600, color: "#1d1d1f" }}>{metrics.totalSubmissions}</div>
+              <div style={{ fontSize: 15, color: "#86868b", marginTop: 8, fontWeight: 500 }}>Submissions</div>
+              <div style={{ fontSize: 13, color: "#06c", marginTop: 6, fontWeight: 600 }}>{metrics.filledToSubmitRate}%</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, color: "#86868b", fontSize: 12 }}>
+            * “Completion Rate” card above uses per-code logic (same code must both open and submit).
+          </div>
+        </div>
+
+        {/* MOST ACTIVE CODES */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f", marginBottom: 20 }}>Most Active Codes</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {metrics.topCodes.map(([code, count], idx) => (
-              <div key={code} style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: 16,
-                background: 'rgba(255, 255, 255, 0.5)',
-                borderRadius: 12,
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-              }}>
-                <div style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: `linear-gradient(135deg, ${['#0ea5e9', '#06b6d4', '#10b981', '#f59e0b', '#3b82f6'][idx]} 0%, ${['#0284c7', '#0891b2', '#059669', '#d97706', '#2563eb'][idx]} 100%)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: 700,
-                  fontSize: 14,
-                  marginRight: 16,
-                }}>
+              <div
+                key={code}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "16px 20px",
+                  background: "#f5f5f7",
+                  borderRadius: 12,
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#e8e8ed")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#f5f5f7")}
+              >
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    background: "#1d1d1f",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "white",
+                    fontWeight: 600,
+                    fontSize: 14,
+                    marginRight: 16,
+                  }}
+                >
                   {idx + 1}
                 </div>
-                <div style={{ flex: 1, fontFamily: 'monospace', fontSize: 14, fontWeight: 600 }}>{code}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#0ea5e9' }}>{count} events</div>
+                <div style={{ flex: 1, fontFamily: "'SF Mono', Monaco, monospace", fontSize: 15, fontWeight: 500, color: "#1d1d1f" }}>
+                  {code}
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: "#1d1d1f" }}>{count}</div>
+                <div style={{ fontSize: 13, color: "#86868b", marginLeft: 6, fontWeight: 500 }}>events</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Data Tables */}
-        <div style={{ ...glassCard, marginBottom: 40 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 16 }}>Recent Opens</h2>
+        {/* RECENT OPENS TABLE (with Name/Email/Phone + per-table filter) */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f" }}>Recent Opens</h2>
+            <input
+              type="text"
+              placeholder="Filter (code/name/email/phone)"
+              value={opensFilter}
+              onChange={(e) => setOpensFilter(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e5ea" }}
+            />
+          </div>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>Loading...</div>
+            <div style={{ textAlign: "center", padding: 48, color: "#86868b", fontSize: 15 }}>Loading...</div>
           ) : error ? (
-            <div style={{ color: '#ef4444', padding: 20 }}>{error}</div>
+            <div style={{ color: "#ff3b30", padding: 20, fontSize: 15 }}>{error}</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#0ea5e9', fontWeight: 600, fontSize: 14 }}>Code</th>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#0ea5e9', fontWeight: 600, fontSize: 14 }}>Opened At</th>
+                    <th style={th}>Code</th>
+                    <th style={th}>Name</th>
+                    <th style={th}>Email</th>
+                    <th style={th}>Phone</th>
+                    <th style={th}>Opened At</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {codeOpens.slice(0, 10).map((row, idx) => (
-                    <tr key={idx} style={{
-                      background: 'rgba(255, 255, 255, 0.4)',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(14, 165, 233, 0.15)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.4)'}>
-                      <td style={{ padding: '16px', borderTopLeftRadius: 12, borderBottomLeftRadius: 12, fontFamily: 'monospace', fontWeight: 600 }}>{row.code}</td>
-                      <td style={{ padding: '16px', borderTopRightRadius: 12, borderBottomRightRadius: 12, color: '#666' }}>{row.opened_at}</td>
-                    </tr>
-                  ))}
+                  {filtered.opens
+                    .filter((row) => {
+                      const c = contactByCode[row.code] || {};
+                      return (
+                        !opensFilter ||
+                        includes(row.code, opensFilter) ||
+                        includes(c.name ?? "", opensFilter) ||
+                        includes(c.email ?? "", opensFilter) ||
+                        includes(c.phone ?? "", opensFilter)
+                      );
+                    })
+                    .slice(0, 50)
+                    .map((row, idx) => {
+                      const c = contactByCode[row.code] || {};
+                      return (
+                        <tr key={idx} style={tr} {...rowHover}>
+                          <td style={tdMonoLeft}>{row.code}</td>
+                          <td style={td}>{c.name ?? "—"}</td>
+                          <td style={td}>{c.email ?? "—"}</td>
+                          <td style={td}>{c.phone ?? "—"}</td>
+                          <td style={tdRight}>{row.opened_at}</td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        <div style={{ ...glassCard, marginBottom: 40 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 16 }}>Input Events</h2>
+        {/* INPUT EVENTS TABLE */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f" }}>Input Events</h2>
+            <input
+              type="text"
+              placeholder="Filter (code/field/value/name/email/phone)"
+              value={eventsFilter}
+              onChange={(e) => setEventsFilter(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e5ea" }}
+            />
+          </div>
           {inputLoading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>Loading...</div>
+            <div style={{ textAlign: "center", padding: 48, color: "#86868b", fontSize: 15 }}>Loading...</div>
           ) : inputError ? (
-            <div style={{ color: '#ef4444', padding: 20 }}>{inputError}</div>
+            <div style={{ color: "#ff3b30", padding: 20, fontSize: 15 }}>{inputError}</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#06b6d4', fontWeight: 600, fontSize: 14 }}>Code</th>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#06b6d4', fontWeight: 600, fontSize: 14 }}>Field</th>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#06b6d4', fontWeight: 600, fontSize: 14 }}>Value</th>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#06b6d4', fontWeight: 600, fontSize: 14 }}>Changed At</th>
+                    <th style={th}>Code</th>
+                    <th style={th}>Name</th>
+                    <th style={th}>Email</th>
+                    <th style={th}>Phone</th>
+                    <th style={th}>Field</th>
+                    <th style={th}>Value</th>
+                    <th style={th}>Changed At</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {inputEvents.slice(0, 10).map((row, idx) => (
-                    <tr key={row.id} style={{
-                      background: 'rgba(255, 255, 255, 0.4)',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(6, 182, 212, 0.15)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.4)'}>
-                      <td style={{ padding: '16px', borderTopLeftRadius: 12, borderBottomLeftRadius: 12, fontFamily: 'monospace', fontWeight: 600 }}>{row.code}</td>
-                      <td style={{ padding: '16px', color: '#666' }}>{row.field_name}</td>
-                      <td style={{ padding: '16px', color: '#666' }}>{row.input_value}</td>
-                      <td style={{ padding: '16px', borderTopRightRadius: 12, borderBottomRightRadius: 12, color: '#666' }}>{row.changed_at}</td>
-                    </tr>
-                  ))}
+                  {filtered.events
+                    .filter((row) => {
+                      const c = contactByCode[row.code] || {};
+                      return (
+                        !eventsFilter ||
+                        includes(row.code, eventsFilter) ||
+                        includes(row.field_name, eventsFilter) ||
+                        includes(String(row.input_value ?? ""), eventsFilter) ||
+                        includes(c.name ?? "", eventsFilter) ||
+                        includes(c.email ?? "", eventsFilter) ||
+                        includes(c.phone ?? "", eventsFilter)
+                      );
+                    })
+                    .slice(0, 50)
+                    .map((row) => {
+                      const c = contactByCode[row.code] || {};
+                      return (
+                        <tr key={row.id} style={tr} {...rowHover}>
+                          <td style={tdMonoLeft}>{row.code}</td>
+                          <td style={td}>{c.name ?? "—"}</td>
+                          <td style={td}>{c.email ?? "—"}</td>
+                          <td style={td}>{c.phone ?? "—"}</td>
+                          <td style={td}>{row.field_name}</td>
+                          <td style={td}>{String(row.input_value ?? "")}</td>
+                          <td style={tdRight}>{row.changed_at}</td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        <div style={{ ...glassCard, marginBottom: 40 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 16 }}>Form Submissions</h2>
+        {/* FORM SUBMISSIONS TABLE */}
+        <div style={{ ...card, marginBottom: 32 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f" }}>Form Submissions</h2>
+            <input
+              type="text"
+              placeholder="Filter (code/name/email/phone)"
+              value={subsFilter}
+              onChange={(e) => setSubsFilter(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e5ea" }}
+            />
+          </div>
           {submissionLoading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>Loading...</div>
+            <div style={{ textAlign: "center", padding: 48, color: "#86868b", fontSize: 15 }}>Loading...</div>
           ) : submissionError ? (
-            <div style={{ color: '#ef4444', padding: 20 }}>{submissionError}</div>
+            <div style={{ color: "#ff3b30", padding: 20, fontSize: 15 }}>{submissionError}</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#f59e0b', fontWeight: 600, fontSize: 14 }}>Code</th>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#f59e0b', fontWeight: 600, fontSize: 14 }}>Submitted At</th>
-                    <th style={{ textAlign: 'left', padding: '12px 16px', color: '#f59e0b', fontWeight: 600, fontSize: 14 }}>Data</th>
+                    <th style={th}>Code</th>
+                    <th style={th}>Name</th>
+                    <th style={th}>Email</th>
+                    <th style={th}>Phone</th>
+                    <th style={th}>Submitted At</th>
+                    <th style={th}>Data</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {formSubmissions.slice(0, 10).map((row, idx) => (
-                    <tr key={row.id} style={{
-                      background: 'rgba(255, 255, 255, 0.4)',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.4)'}>
-                      <td style={{ padding: '16px', borderTopLeftRadius: 12, borderBottomLeftRadius: 12, fontFamily: 'monospace', fontWeight: 600 }}>{row.code}</td>
-                      <td style={{ padding: '16px', color: '#666' }}>{row.submitted_at}</td>
-                      <td style={{ padding: '16px', borderTopRightRadius: 12, borderBottomRightRadius: 12 }}>
-                        <pre style={{ margin: 0, fontSize: 12, color: '#666', maxWidth: 300, overflow: 'auto' }}>{JSON.stringify(row.submission_data, null, 2)}</pre>
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.subs
+                    .filter((row) => {
+                      const c = contactByCode[row.code] || {};
+                      const sd = row.submission_data || {};
+                      return (
+                        !subsFilter ||
+                        includes(row.code, subsFilter) ||
+                        includes(c.name ?? String(sd["name"] ?? sd["full_name"] ?? ""), subsFilter) ||
+                        includes(c.email ?? String(sd["email"] ?? ""), subsFilter) ||
+                        includes(c.phone ?? String(sd["phone"] ?? sd["phone_number"] ?? ""), subsFilter)
+                      );
+                    })
+                    .slice(0, 50)
+                    .map((row) => {
+                      const c = contactByCode[row.code] || {};
+                      const sd = row.submission_data || {};
+                      const n = c.name ?? (sd["name"] as string) ?? (sd["full_name"] as string) ?? "—";
+                      const em = c.email ?? (sd["email"] as string) ?? "—";
+                      const ph = c.phone ?? (sd["phone"] as string) ?? (sd["phone_number"] as string) ?? "—";
+                      return (
+                        <tr key={row.id} style={tr} {...rowHover}>
+                          <td style={tdMonoLeft}>{row.code}</td>
+                          <td style={td}>{n}</td>
+                          <td style={td}>{em}</td>
+                          <td style={td}>{ph}</td>
+                          <td style={tdRight}>{row.submitted_at}</td>
+                          <td style={{ ...td, maxWidth: 320 }}>
+                            <pre
+                              style={{
+                                margin: 0,
+                                fontSize: 12,
+                                fontFamily: "'SF Mono', Monaco, monospace",
+                                color: "#86868b",
+                                overflow: "auto",
+                              }}
+                            >
+                              {JSON.stringify(sd, null, 2)}
+                            </pre>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
-          <div style={glassCard}>
-            <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 16 }}>Discounts</h2>
+        {/* DISCOUNTS / REFERRALS */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 12 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f" }}>Discounts</h2>
+              <input
+                type="text"
+                placeholder="Filter (code/name/email/phone)"
+                value={discountFilter}
+                onChange={(e) => setDiscountFilter(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e5ea" }}
+              />
+            </div>
             {discountLoading ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>Loading...</div>
+              <div style={{ textAlign: "center", padding: 48, color: "#86868b", fontSize: 15 }}>Loading...</div>
             ) : discountError ? (
-              <div style={{ color: '#ef4444', padding: 20 }}>{discountError}</div>
+              <div style={{ color: "#ff3b30", padding: 20, fontSize: 15 }}>{discountError}</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {discounts.slice(0, 5).map((row, idx) => (
-                  <div key={row.id} style={{
-                    padding: 16,
-                    background: 'rgba(255, 255, 255, 0.4)',
-                    borderRadius: 12,
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.4)'}>
-                    <div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#3b82f6', marginBottom: 8 }}>{row.code}</div>
-                    <div style={{ fontSize: 14, color: '#1a1a1a', fontWeight: 600 }}>{row.name}</div>
-                    <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{row.email}</div>
-                  </div>
-                ))}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Code</th>
+                      <th style={th}>Name</th>
+                      <th style={th}>Email</th>
+                      <th style={th}>Phone</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.disc
+                      .filter(
+                        (d) =>
+                          !discountFilter ||
+                          includes(d.code, discountFilter) ||
+                          includes(d.name, discountFilter) ||
+                          includes(d.email, discountFilter) ||
+                          includes(d.phone, discountFilter)
+                      )
+                      .slice(0, 50)
+                      .map((row) => (
+                        <tr key={row.id} style={tr} {...rowHover}>
+                          <td style={tdMonoLeft}>{row.code}</td>
+                          <td style={td}>{row.name}</td>
+                          <td style={td}>{row.email}</td>
+                          <td style={td}>{row.phone}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
 
-          <div style={glassCard}>
-            <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a', marginBottom: 16 }}>Referrals</h2>
+          <div style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 12 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1d1d1f" }}>Referrals</h2>
+              <input
+                type="text"
+                placeholder="Filter (code/name/email/phone)"
+                value={referralFilter}
+                onChange={(e) => setReferralFilter(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e5ea" }}
+              />
+            </div>
             {referralLoading ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>Loading...</div>
+              <div style={{ textAlign: "center", padding: 48, color: "#86868b", fontSize: 15 }}>Loading...</div>
             ) : referralError ? (
-              <div style={{ color: '#ef4444', padding: 20 }}>{referralError}</div>
+              <div style={{ color: "#ff3b30", padding: 20, fontSize: 15 }}>{referralError}</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {referrals.slice(0, 5).map((row, idx) => (
-                  <div key={row.id} style={{
-                    padding: 16,
-                    background: 'rgba(255, 255, 255, 0.4)',
-                    borderRadius: 12,
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.4)'}>
-                    <div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#10b981', marginBottom: 8 }}>{row.code}</div>
-                    <div style={{ fontSize: 14, color: '#1a1a1a', fontWeight: 600 }}>{row.name}</div>
-                    <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{row.email}</div>
-                  </div>
-                ))}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Code</th>
+                      <th style={th}>Name</th>
+                      <th style={th}>Email</th>
+                      <th style={th}>Phone</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.refs
+                      .filter(
+                        (r) =>
+                          !referralFilter ||
+                          includes(r.code, referralFilter) ||
+                          includes(r.name, referralFilter) ||
+                          includes(r.email, referralFilter) ||
+                          includes(r.phone, referralFilter)
+                      )
+                      .slice(0, 50)
+                      .map((row) => (
+                        <tr key={row.id} style={tr} {...rowHover}>
+                          <td style={tdMonoLeft}>{row.code}</td>
+                          <td style={td}>{row.name}</td>
+                          <td style={td}>{row.email}</td>
+                          <td style={td}>{row.phone}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -568,6 +934,45 @@ const Dashboard: React.FC = () => {
       </div>
     </div>
   );
+};
+
+// table cell styles
+const th: React.CSSProperties = {
+  textAlign: "left",
+  padding: "10px 16px",
+  color: "#86868b",
+  fontWeight: 500,
+  fontSize: 13,
+  letterSpacing: "0.01em",
+};
+
+const tr: React.CSSProperties = {
+  background: "#f5f5f7",
+  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+};
+
+const td: React.CSSProperties = {
+  padding: "14px 16px",
+  color: "#1d1d1f",
+  fontSize: 14,
+};
+
+const tdRight: React.CSSProperties = {
+  ...td,
+  color: "#86868b",
+  textAlign: "right",
+  borderTopRightRadius: 10,
+  borderBottomRightRadius: 10,
+};
+
+const tdMonoLeft: React.CSSProperties = {
+  ...td,
+  fontFamily: "'SF Mono', Monaco, monospace",
+  fontWeight: 500,
+  fontSize: 14,
+  color: "#1d1d1f",
+  borderTopLeftRadius: 10,
+  borderBottomLeftRadius: 10,
 };
 
 export default Dashboard;
